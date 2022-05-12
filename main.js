@@ -1,6 +1,6 @@
 // credits: https://github.com/0xScar/whale-watcher
 
-const config = require('./config.js');
+// const config = require('./config.js');
 const { ethers } = require('ethers');
 const Bot = require('./bot.js');
 

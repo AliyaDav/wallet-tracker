@@ -2,6 +2,7 @@
 const StateMachine = require('javascript-state-machine');
 const TelegramBotClient = require('node-telegram-bot-api');
 const walletsFile = 'trackedAddresses.csv';
+const config = require('./config.js');
 const fs = require('fs');
 const csvWriter = require('csv-write-stream')
 

@@ -2,10 +2,9 @@
 const StateMachine = require('javascript-state-machine');
 const TelegramBotClient = require('node-telegram-bot-api');
 const walletsFile = 'trackedAddresses.csv';
+const config = require('./config.js');
 const fs = require('fs');
-const csv = require('csvtojson');
-const { Parser } = require('json2csv');
-const json2csv = require('json2csv').parse;
+const csvWriter = require('csv-write-stream')
 
 function createFsm() {
     return new StateMachine({
@@ -13,58 +12,33 @@ function createFsm() {
         transitions: [
             { name: 'gotstart', from: 'waitingstart', to: 'waitingchain' },
             { name: 'gotchain', from: 'waitingchain', to: 'waitingwallet' },
-            { name: 'gotwallet', from: 'waitingwallet', to: 'tracking' },
-            { name: 'gotaddorder', from: '*', to: 'waitingchain' },
-            { name: 'gotremoveorder', from: '*', to: 'removingwallet' },
-            { name: 'gotremovedwallet', from: 'removingwallet', to: 'removedwallet' },
-            { name: 'reset', from: '*', to: 'invalid' }
+            { name: 'gotwallet', from: 'waitingwallet', to: 'final' },
+            // { name: 'remove wallet', from: 'echoing', to: 'confirm' },
+            // { name: 'confirmed', from: 'confirm', to: 'final' },
+            // { name: 'cancelled', from: 'confirm', to: 'echoing' },
+            // { name: 'invalid', from: 'confirm', to: 'confirm' }
         ],
         methods: {
             isFinished: function () { return this.state === 'done' },
             saveRecord: function () {
 
-                let rows;
+                if (!fs.existsSync(walletsFile))
+                    writer = csvWriter({ headers: ["ChatId", "Chain", "Wallet", "Tracked"] });
+                else
+                    writer = csvWriter({ sendHeaders: false });
 
-                const walletToAdd = {
+                writer.pipe(fs.createWriteStream(walletsFile, { flags: 'a' }));
+                writer.write({
                     ChatId: this.chatId,
                     Chain: this.chain,
                     Wallet: this.wallet,
                     Tracked: true
-                }
-
-                if (!fs.existsSync(walletsFile)) {
-                    rows = json2csv(walletToAdd, { header: true });
-                } else {
-                    rows = json2csv(walletToAdd, { header: false });
-                }
-
-                fs.appendFileSync(walletsFile, rows);
-                fs.appendFileSync(walletsFile, "\r\n");
-            },
-            removeRecord: async (wallet) => {
-
-                var filteredWallets = [];
-                var walletFound = '';
-                const wallets = await csv().fromFile(walletsFile);
-
-                for (let w of wallets) {
-                    if (w.Wallet != wallet) {
-                        filteredWallets.push(w)
-                    } else {
-                        walletFound = wallet
-                    }
-                }
-
-                const newTrackedWallets = new Parser({ fields: ["ChatId", "Chain", "Wallet", "Tracked"] }).parse(filteredWallets);
-                fs.writeFileSync(walletsFile, newTrackedWallets);
-                fs.appendFileSync(walletsFile, "\r\n");
-
-                if (walletFound != '') {
-                    return walletFound
-                }
+                });
+                writer.end();
             }
+
         }
-    });
+    })
 }
 
 function eventFromStateAndMessageText(state, text) {
@@ -73,61 +47,40 @@ function eventFromStateAndMessageText(state, text) {
             return text === '/start' && 'gotstart'
             break
         case 'waitingchain':
-            if (text == '1' || text == '2') {
-                return 'gotchain'
-            } else { return 'waitingchain' }
+            console.log(`Text is ${text}`);
+            return (text === '1' || text === '2') && 'gotchain'
             break
         case 'waitingwallet':
-            return 'gotwallet' // TODO: check sintax of wallet address
+            return 'gotwallet' // TODO: check regex of wallet address
             break
-        case 'tracking':
-            if (text == 'Add wallet') {
-                return 'gotaddorder'
-            } else if (text == 'Remove wallet') {
-                return 'gotremoveorder'
-            } else { return 'reset' }
-            break
-        case 'removingwallet':
-            return 'gotremovedwallet'
-            break
-        case 'removedwallet':
-            if (text == 'Add wallet') {
-                return 'gotaddorder'
-            } else if (text == 'Remove wallet') {
-                return 'gotremoveorder'
-            } else { return 'reset' }
-            break
-        case 'invalid':
-            if (text == 'Add wallet') {
-                return 'gotaddorder'
-            } else if (text == 'Remove wallet') {
-                return 'gotremoveorder'
-            } else { return 'reset' }
-            break
+        // case 'confirm':
+        //     if (text === 'yes') {
+        //         return 'confirmed'
+        //     } else if (text === 'no') {
+        //         return 'cancelled'
+        //     } else {
+        //         return 'invalid'
+        //     }
     }
 }
-
-const commands = ['Remove wallet', 'Add wallet', 'Add chain']
 
 class Bot {
     constructor(token) {
         this.client = new TelegramBotClient(token,
-            { polling: true }
+            // { polling: true }
         );
-        // this.client.setWebHook(config.heroku_app + ':443/bot' + token);
+        this.client.setWebHook(config.heroku_app + ':443/bot' + token);
     }
 
     start() {
         this.client.on('message', message => {
-            if ((!message.reply_to_message) && (!commands.includes(message.text))) {
+            if (!message.reply_to_message) {
                 this.respondTo(message)
             }
         })
     }
 
-    // TODO: add 'balances' , 'list of tracked wallets'
     async respondTo(message) {
-        // console.log('New fsm created')
         let fsm = createFsm()
         let lastReply = message
         let lastMessage
@@ -146,51 +99,25 @@ class Bot {
                 { reply_markup: JSON.stringify({ force_reply: true }) });
         }
 
-        fsm.onEnterTracking = () => {
+        fsm.onEnterFinal = () => {
             fsm.wallet = lastReply.text;
             lastMessage = this.client.sendMessage(message.chat.id,
-                `The address ${lastReply.text} is now being tracked for transactions. You can add/remove tracked wallets.`,
-                {
-                    reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
-                });
+                `The address ${lastReply.text} is now being tracked for transactions.`);
             fsm.saveRecord();
-        }
-
-        fsm.onEnterRemovingwallet = () => {
-            lastMessage = this.client.sendMessage(message.chat.id,
-                "Type wallet address that you want to remove from tracking list",
-                { reply_markup: JSON.stringify({ force_reply: true }) });
-        }
-
-        fsm.onEnterRemovedwallet = () => {
-            var wallet_to_remove = lastReply.text;
-            const removed_wallet = fsm.removeRecord(wallet_to_remove);
-            if (removed_wallet) {
-                lastMessage = this.client.sendMessage(message.chat.id,
-                    `The address ${lastReply.text} is removed from tracking list.`,
-                    {
-                        reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
-                    });
-            } else {
-                lastMessage = this.client.sendMessage(message.chat.id,
-                    `The address ${wallet_to_remove} is not found in the tracking list.`,
-                    {
-                        reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
-                    });
-            }
         }
 
         fsm.onEnterInvalid = () => {
             lastMessage = this.client.sendMessage(message.chat.id,
-                'Sorry, I didn\'t catch that. Please choose one of the commands.',
-                {
-                    reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
-                });
+                'Sorry, I didn\'t catch that, do you want to cancel? (yes/no)',
+                { reply_markup: JSON.stringify({ force_reply: true }) });
         }
 
-        while (fsm.state != 'done') {
+        while (!fsm.isFinished()) {
             let text = lastReply.text
+            // console.log(`last reply text - ${text}, state is ${fsm.state}`)
             let event = eventFromStateAndMessageText(fsm.state, text)
+
+            // console.log(`Event is ${event}`)
 
             if (!event || !fsm.can(event)) {
                 this.client.sendMessage(message.chat.id, 'I wasn\'t expecting that, try /start')
@@ -200,16 +127,14 @@ class Bot {
             fsm[event](lastReply)
 
             let sentMessage = await lastMessage
-            lastReply = await new Promise(resolve => {
-                if (!sentMessage.reply_to_message) {
-                    this.client.on('message', resolve)
-                } else {
-                    this.client.onReplyToMessage(sentMessage.chat.id, sentMessage.message_id, resolve)
-                }
-            })
-            // console.log('In the end: state - ', fsm.state);
+            // console.log("Last sent message - ", sentMessage);
+            lastReply = await new Promise(resolve => this.client.onReplyToMessage(sentMessage.chat.id, sentMessage.message_id, resolve))
+            // console.log("Last reply - ", lastReply)
         }
     }
 }
 
+// const bot = new Bot('5378223287:AAHEbIsWPvnS1utcSFN2KrEZxh6a7gu0Y7U');
+// bot.start();
+// export default Bot;
 module.exports = Bot;

@@ -1,6 +1,6 @@
 node_modules/
 *.env
 *.code-workspace
-# config.js
+config.js
 npm-debug.log
 .DS_Store

@@ -1,1 +1,1 @@
-# Wallet tracker, telegram notifications
+# Wallets tracker, telegram notifications

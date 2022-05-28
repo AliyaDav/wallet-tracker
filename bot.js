@@ -6,15 +6,22 @@ const fs = require('fs');
 const csv = require('csvtojson');
 const { Parser } = require('json2csv');
 const json2csv = require('json2csv').parse;
+const web3 = require('@solana/web3.js');
+const spl = require('@solana/spl-token');
+const Ethplorer = require('ethplorer-js').Ethplorer
 
 function createFsm() {
     return new StateMachine({
         init: 'waitingstart',
         transitions: [
-            { name: 'gotstart', from: 'waitingstart', to: 'waitingchain' },
-            { name: 'gotchain', from: 'waitingchain', to: 'waitingwallet' },
-            { name: 'gotwallet', from: 'waitingwallet', to: 'tracking' },
-            { name: 'gotaddorder', from: '*', to: 'waitingchain' },
+            // { name: 'gotstart', from: 'waitingstart', to: 'waitingchain' },
+            { name: 'gotstart', from: '*', to: 'choosingaction' },
+            { name: 'gotbalancerequest', from: '*', to: 'waitingchain2' },
+            { name: 'gotchain1', from: 'waitingchain1', to: 'waitingwallet1' },
+            { name: 'gotchain2', from: 'waitingchain2', to: 'waitingwallet2' },
+            { name: 'gotwallet1', from: 'waitingwallet1', to: 'tracking' },
+            { name: 'gotwallet2', from: 'waitingwallet2', to: 'checkingbalance' },
+            { name: 'gotaddorder', from: '*', to: 'waitingchain1' },
             { name: 'gotremoveorder', from: '*', to: 'removingwallet' },
             { name: 'gotremovedwallet', from: 'removingwallet', to: 'removedwallet' },
             { name: 'reset', from: '*', to: 'invalid' }
@@ -72,19 +79,47 @@ function eventFromStateAndMessageText(state, text) {
         case 'waitingstart':
             return text === '/start' && 'gotstart'
             break
-        case 'waitingchain':
-            if (text == '1' || text == '2') {
-                return 'gotchain'
-            } else { return 'waitingchain' }
+        case 'choosingaction':
+            if (text == 'Add wallet') {
+                return 'gotaddorder'
+            } else if (text == 'Remove wallet') {
+                return 'gotremoveorder'
+            } else if (text == 'Check balance') {
+                return 'gotbalancerequest'
+            } else { return 'reset' }
             break
-        case 'waitingwallet':
-            return 'gotwallet' // TODO: check sintax of wallet address
+        case 'waitingchain1':
+            if (text == '1' || text == '2') {
+                return 'gotchain1'
+            } else { return 'waitingchain1' }
+            break
+        case 'waitingchain2':
+            if (text == '1' || text == '2') {
+                return 'gotchain2'
+            } else { return 'waitingchain1' }
+            break
+        case 'waitingwallet1':
+            return 'gotwallet1' // TODO: check sintax of wallet address
+            break
+        case 'waitingwallet2':
+            return 'gotwallet2' // TODO: check sintax of wallet address
             break
         case 'tracking':
             if (text == 'Add wallet') {
                 return 'gotaddorder'
             } else if (text == 'Remove wallet') {
                 return 'gotremoveorder'
+            } else if (text == 'Check balance') {
+                return 'gotbalancerequest'
+            } else { return 'reset' }
+            break
+        case 'checkingbalance':
+            if (text == 'Add wallet') {
+                return 'gotaddorder'
+            } else if (text == 'Remove wallet') {
+                return 'gotremoveorder'
+            } else if (text == 'Check balance') {
+                return 'gotbalancerequest'
             } else { return 'reset' }
             break
         case 'removingwallet':
@@ -106,6 +141,46 @@ function eventFromStateAndMessageText(state, text) {
             break
     }
 }
+
+function checkSolanaTokensBalance(wallet) {
+    const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+    const tokenAccounts = (async (wallet) => {
+        connection.getTokenAccountsByOwner(
+            new web3.PublicKey(wallet),
+            {
+                programId: spl.TOKEN_PROGRAM_ID,
+            })
+    })(wallet);
+
+    var msg_text = 'Token                     Balance\n------------------------------------------------\n'
+
+    tokenAccounts.then(data => {
+        data.value.forEach((e) => {
+            const accountInfo = spl.AccountLayout.decode(e.account.data);
+            // console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
+            if (accountInfo.amount != '0') {
+                msg_text += `${accountInfo.mint}    ${accountInfo.amount}\n`
+            };
+        })
+    });
+
+    return msg_text;
+
+}
+
+async function checkEthereumTokensBalance(wallet) {
+    let api = new Ethplorer();
+    var msg = 'Token                        Balance\n------------------------------------------------\n';
+
+    let address_info = await api.getAddressInfo(wallet)
+    // console.log(address_info);
+
+    for (let i of address_info['tokens']) {
+        msg += `${i['tokenInfo']['address']} (${i['tokenInfo']['symbol']})   ${i['balance'] / (10 ** (parseInt(i['tokenInfo']['decimals']) | 0))}\n`
+    };
+    return msg;
+};
+
 
 const commands = ['Remove wallet', 'Add wallet', 'Add chain']
 
@@ -132,17 +207,47 @@ class Bot {
         let lastReply = message
         let lastMessage
 
-        fsm.onEnterWaitingchain = () => {
+        fsm.onLeaveWaitingstart = () => {
             fsm.chatId = message.chat.id;
             lastMessage = this.client.sendMessage(message.chat.id,
-                'Let\'s begin! Which chain do you want to track? Type 1 for Solana, 2 for Ethereum',
+                'Hey there! I am a Wallet tracker. I can check any wallet balance on Ethereum or Solana and notify you upon token transfers.',
+            );
+        }
+
+        fsm.onEnterChoosingaction = () => {
+            fsm.chatId = message.chat.id;
+            lastMessage = this.client.sendMessage(message.chat.id,
+                `Please choose what you would like to do.`,
+                {
+                    reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
+                });
+        }
+
+        fsm.onEnterWaitingchain1 = () => {
+            fsm.chatId = message.chat.id;
+            lastMessage = this.client.sendMessage(message.chat.id,
+                'Which chain do you want to track? Type 1 for Solana, 2 for Ethereum',
                 { reply_markup: JSON.stringify({ force_reply: true }) });
         }
 
-        fsm.onEnterWaitingwallet = () => {
+        fsm.onEnterWaitingchain2 = () => {
+            fsm.chatId = message.chat.id;
+            lastMessage = this.client.sendMessage(message.chat.id,
+                'Which chain does the wallet belong to? Type 1 for Solana, 2 for Ethereum',
+                { reply_markup: JSON.stringify({ force_reply: true }) });
+        }
+
+        fsm.onEnterWaitingwallet1 = () => {
             fsm.chain = lastReply.text;
             lastMessage = this.client.sendMessage(message.chat.id,
-                `Got it ${message.chat.first_name}, now type the wallet address`,
+                `Got it, ${message.chat.first_name}, now type the wallet address`,
+                { reply_markup: JSON.stringify({ force_reply: true }) });
+        }
+
+        fsm.onEnterWaitingwallet2 = () => {
+            fsm.chain = lastReply.text;
+            lastMessage = this.client.sendMessage(message.chat.id,
+                `Alright, now type the wallet address`,
                 { reply_markup: JSON.stringify({ force_reply: true }) });
         }
 
@@ -151,9 +256,28 @@ class Bot {
             lastMessage = this.client.sendMessage(message.chat.id,
                 `The address ${lastReply.text} is now being tracked for transactions. You can add/remove tracked wallets.`,
                 {
-                    reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
+                    reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
                 });
             fsm.saveRecord();
+        }
+
+        fsm.onEnterCheckingbalance = () => {
+            fsm.wallet = lastReply.text;
+            // let msg_text;
+
+            if (fsm.chain == '2') {
+                var msg_text = checkEthereumTokensBalance(fsm.wallet)
+            } else if (fsm.chain == '1') {
+                var msg_text = checkSolanaTokensBalance(fsm.wallet)
+            };
+
+            console.log(`message is ${msg_text}`);
+
+            lastMessage = this.client.sendMessage(message.chat.id,
+                `The balance of ${fsm.wallet} is:\n${msg_text}`,
+                {
+                    reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
+                });
         }
 
         fsm.onEnterRemovingwallet = () => {

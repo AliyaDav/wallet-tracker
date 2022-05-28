@@ -85,7 +85,7 @@ class TransactionChecker {
         this.customWsProvider.on(this.topicSets, (log, event) => {
 
             var log_hash_new = log['transactionHash'];
-            console.log('new hash - ', log_hash_new, 'old hash - ', this.log_hash);
+            // console.log('new hash - ', log_hash_new, 'old hash - ', this.log_hash);
 
             if (this.log_hash != log_hash_new) {
 

@@ -7,5 +7,5 @@ module.exports = {
     infura_mainnet_http: `https://mainnet.infura.io/v3/56742363c7df464ea4936e4eb9d03139`,
 
     bot_token: '5378223287:AAHEbIsWPvnS1utcSFN2KrEZxh6a7gu0Y7U',
-    huroku_app: 'https://notification-tg-bot.herokuapp.com/'
+    heroku_app: 'https://notification-tg-bot.herokuapp.com/'
 };

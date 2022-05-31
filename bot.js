@@ -9,12 +9,12 @@ const json2csv = require('json2csv').parse;
 const web3 = require('@solana/web3.js');
 const spl = require('@solana/spl-token');
 const Ethplorer = require('ethplorer-js').Ethplorer
+const config = require('./config.js');
 
 function createFsm() {
     return new StateMachine({
         init: 'waitingstart',
         transitions: [
-            // { name: 'gotstart', from: 'waitingstart', to: 'waitingchain' },
             { name: 'gotstart', from: '*', to: 'choosingaction' },
             { name: 'gotbalancerequest', from: '*', to: 'waitingchain2' },
             { name: 'gotchain1', from: 'waitingchain1', to: 'waitingwallet1' },
@@ -130,6 +130,8 @@ function eventFromStateAndMessageText(state, text) {
                 return 'gotaddorder'
             } else if (text == 'Remove wallet') {
                 return 'gotremoveorder'
+            } else if (text == 'Check balance') {
+                return 'gotbalancerequest'
             } else { return 'reset' }
             break
         case 'invalid':
@@ -137,19 +139,22 @@ function eventFromStateAndMessageText(state, text) {
                 return 'gotaddorder'
             } else if (text == 'Remove wallet') {
                 return 'gotremoveorder'
+            } else if (text == 'Check balance') {
+                return 'gotbalancerequest'
             } else { return 'reset' }
             break
     }
 }
 
-const commands = ['Remove wallet', 'Add wallet', 'Add chain']
+const commands = ["Add wallet", "Remove wallet", "Check balance"]
 
 class Bot {
     constructor(token) {
         this.client = new TelegramBotClient(token,
-            { polling: true }
+            // { polling: true }
         );
-        // this.client.setWebHook(config.heroku_app + ':443/bot' + token);
+        this.client.setWebHook(config.heroku_app + token);
+        console.log(config.heroku_app + token);
     }
 
     start() {
@@ -192,7 +197,6 @@ class Bot {
 
             tokenAccounts.value.forEach((e) => {
                 const accountInfo = spl.AccountLayout.decode(e.account.data);
-                // console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
                 if (accountInfo.amount != '0') {
                     msg_text += `${accountInfo.mint}    ${accountInfo.amount}\n`
                 };
@@ -205,9 +209,8 @@ class Bot {
 
     };
 
-    // TODO: add 'list of tracked wallets'
+    // TODO: add 'list of tracked wallets', solana tracking
     async respondTo(message) {
-        // console.log('New fsm created')
         let fsm = createFsm()
         let lastReply = message
         let lastMessage
@@ -268,16 +271,12 @@ class Bot {
 
         fsm.onEnterCheckingbalance = async () => {
             fsm.wallet = lastReply.text;
-            // let msg_text;
 
             if (fsm.chain == '2') {
                 var msg_text = await this.checkEthereumTokensBalance(fsm.wallet)
             } else if (fsm.chain == '1') {
                 var msg_text = await this.checkSolanaTokensBalance(fsm.wallet)
             };
-
-            // const msg = await msg_text;
-            // console.log(`message is ${msg}`);
 
             lastMessage = this.client.sendMessage(message.chat.id,
                 `The balance of ${fsm.wallet} is:\n${msg_text}`,
@@ -299,13 +298,13 @@ class Bot {
                 lastMessage = this.client.sendMessage(message.chat.id,
                     `The address ${lastReply.text} is removed from tracking list.`,
                     {
-                        reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
+                        reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
                     });
             } else {
                 lastMessage = this.client.sendMessage(message.chat.id,
                     `The address ${wallet_to_remove} is not found in the tracking list.`,
                     {
-                        reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
+                        reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
                     });
             }
         }
@@ -314,7 +313,7 @@ class Bot {
             lastMessage = this.client.sendMessage(message.chat.id,
                 'Sorry, I didn\'t catch that. Please choose one of the commands.',
                 {
-                    reply_markup: { keyboard: [["Add wallet", "Add chain"], ["Remove wallet"]], resize_keyboard: true }
+                    reply_markup: { keyboard: [["Add wallet", "Remove wallet"], ["Check balance"]], resize_keyboard: true }
                 });
         }
 
@@ -337,7 +336,6 @@ class Bot {
                     this.client.onReplyToMessage(sentMessage.chat.id, sentMessage.message_id, resolve)
                 }
             })
-            // console.log('In the end: state - ', fsm.state);
         }
     }
 }

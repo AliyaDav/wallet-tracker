@@ -9,7 +9,8 @@ const fs = require('fs');
 class TransactionChecker {
     customWsProvider;
     infura_http;
-    wallets;
+    eth_wallets;
+    sol_wallets;
     topicSets;
     log_hash;
 
@@ -28,16 +29,21 @@ class TransactionChecker {
     // TODO: update wallets without reading it all over again
     async undateWalletsList() {
 
-        this.wallets = [];
+        this.eth_wallets = [];
+        this.sol_wallets = [];
         if (fs.existsSync('trackedAddresses.csv')) {
             return new Promise((resolve, reject) => {
                 fs.createReadStream('trackedAddresses.csv')
                     .pipe(csv())
                     .on('data', (row) => {
-                        this.wallets.push(row);
+                        if (row['Chain'] == '2') {
+                            this.eth_wallets.push(row);
+                        } else if (row['Chain'] == '1') {
+                            this.sol_wallets.push(row);
+                        }
                     })
                     .on('end', () => {
-                        resolve(this.wallets)
+                        resolve([this.eth_wallets, this.sol_wallets])
                     });
             });
         };
@@ -69,10 +75,9 @@ class TransactionChecker {
         // check if _from or _to matches any of the tracked wallets
         if (row['Wallet'] == addrFrom[0] || row['Wallet'] == addrTo[0]) {
             // if matches, then check of tx was valid
-            console.log('address from coincides: ;', addrFrom[0]);
             if (this.checkValidTx(log)) {
                 // if valid, then send tx link to etherscan to chat id
-                const notification_msg = `TX spotted for address ${row['Wallet']}: ` + "https://etherscan.io/tx/" + log['transactionHash']
+                const notification_msg = `TX spotted for address ${row['Wallet']} on Ethereum: ` + "https://etherscan.io/tx/" + log['transactionHash']
                 this.bot.client.sendMessage(row['ChatId'], notification_msg);
             }
         }
@@ -90,7 +95,7 @@ class TransactionChecker {
             if (this.log_hash != log_hash_new) {
 
                 try {
-                    for (const row of this.wallets) {
+                    for (const row of this.eth_wallets) {
                         this.notifyTrackedAddress(row, log);
                     }
                 } catch (e) {

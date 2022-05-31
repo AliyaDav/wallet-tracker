@@ -7,47 +7,76 @@ const web3 = require('@solana/web3.js');
 const spl = require('@solana/spl-token');
 const metaplex = require("@metaplex/js");
 const mt = require("@metaplex-foundation/mpl-token-metadata");
-const web3 = require('@solana/web3.js');
-const spl = require('@solana/spl-token');
+const fs = require('fs');
+const csv = require('csv-parser');
 
+
+
+// (async () => {
+//     let tokens = [];
+//     text = 'Balances: \n'
+//     const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+
+//     const tokenAccounts = await connection.getTokenAccountsByOwner(
+        
+//         new web3.PublicKey('E8PXoFg4cg7w6jJUursxwq2UHLiLt3pff4AQvFzGaUai'),
+//         //VKvJBDUj2Hi55rpAxLe1QaABt6oDEhBPyxZs1pC6L75
+//         {
+//             programId: spl.TOKEN_PROGRAM_ID,
+//         }
+//     );
+
+//     console.log("Token                                         Balance");
+//     console.log("------------------------------------------------------------");
+//     tokenAccounts.value.forEach((e) => {
+//         const accountInfo = spl.AccountLayout.decode(e.account.data);
+//         console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
+//         if (accountInfo.amount != '0') {
+//             tokens.push(accountInfo.mint);
+//             text += `${accountInfo.mint}    ${accountInfo.amount}\n`
+//         };
+        
+//     })
+
+//     console.log(`total tokens ${tokens.length}`);
+//     console.log(text);
+
+// })();
+
+// function checkAllBalances() {
+//     var i = 0; eth.accounts.forEach(function (e)
+//     { console.log("  eth.accounts[" + i + "]: " + e + " \tbalance: " + web3.fromWei(eth.getBalance(e), "ether") + " ether"); i++; }
+//     )
+// };
+// checkAllBalances();
+
+var eth_wallets = [];
+var sol_wallets = [];
 
 (async () => {
-    let tokens = [];
-    text = 'Balances: \n'
-    const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
 
-    const tokenAccounts = await connection.getTokenAccountsByOwner(
-        
-        new web3.PublicKey('E8PXoFg4cg7w6jJUursxwq2UHLiLt3pff4AQvFzGaUai'),
-        //VKvJBDUj2Hi55rpAxLe1QaABt6oDEhBPyxZs1pC6L75
-        {
-            programId: spl.TOKEN_PROGRAM_ID,
-        }
-    );
-
-    console.log("Token                                         Balance");
-    console.log("------------------------------------------------------------");
-    tokenAccounts.value.forEach((e) => {
-        const accountInfo = spl.AccountLayout.decode(e.account.data);
-        console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
-        if (accountInfo.amount != '0') {
-            tokens.push(accountInfo.mint);
-            text += `${accountInfo.mint}    ${accountInfo.amount}\n`
-        };
-        
-    })
-
-    console.log(`total tokens ${tokens.length}`);
-    console.log(text);
-
+    if (fs.existsSync('trackedAddresses.csv')) {
+        return new Promise((resolve, reject) => {
+            fs.createReadStream('trackedAddresses.csv')
+                .pipe(csv())
+                .on('data', (row) => {
+                    if (row['Chain'] == '2') {
+                        eth_wallets.push(row);
+                        // console.log(row);
+                    } else if (row['Chain'] == '1') {
+                        sol_wallets.push(row);
+                        // console.log(row);
+                    }
+                })
+                .on('end', () => {
+                    resolve([eth_wallets, sol_wallets])
+                });
+        });
+    };
+    
 })();
 
-function checkAllBalances() {
-    var i = 0; eth.accounts.forEach(function (e)
-    { console.log("  eth.accounts[" + i + "]: " + e + " \tbalance: " + web3.fromWei(eth.getBalance(e), "ether") + " ether"); i++; }
-    )
-};
-checkAllBalances();
+console.log('eth:', eth_wallets, 'sol:', sol_wallets);
 
 
 /*

@@ -142,46 +142,6 @@ function eventFromStateAndMessageText(state, text) {
     }
 }
 
-function checkSolanaTokensBalance(wallet) {
-    const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
-    const tokenAccounts = (async (wallet) => {
-        connection.getTokenAccountsByOwner(
-            new web3.PublicKey(wallet),
-            {
-                programId: spl.TOKEN_PROGRAM_ID,
-            })
-    })(wallet);
-
-    var msg_text = 'Token                     Balance\n------------------------------------------------\n'
-
-    tokenAccounts.then(data => {
-        data.value.forEach((e) => {
-            const accountInfo = spl.AccountLayout.decode(e.account.data);
-            // console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
-            if (accountInfo.amount != '0') {
-                msg_text += `${accountInfo.mint}    ${accountInfo.amount}\n`
-            };
-        })
-    });
-
-    return msg_text;
-
-}
-
-async function checkEthereumTokensBalance(wallet) {
-    let api = new Ethplorer();
-    var msg = 'Token                        Balance\n------------------------------------------------\n';
-
-    let address_info = await api.getAddressInfo(wallet)
-    // console.log(address_info);
-
-    for (let i of address_info['tokens']) {
-        msg += `${i['tokenInfo']['address']} (${i['tokenInfo']['symbol']})   ${i['balance'] / (10 ** (parseInt(i['tokenInfo']['decimals']) | 0))}\n`
-    };
-    return msg;
-};
-
-
 const commands = ['Remove wallet', 'Add wallet', 'Add chain']
 
 class Bot {
@@ -200,7 +160,52 @@ class Bot {
         })
     }
 
-    // TODO: add 'balances' , 'list of tracked wallets'
+    async checkEthereumTokensBalance(wallet) {
+        let api = new Ethplorer();
+
+        try {
+            var msg = 'Token                  Balance\n------------------------------------------------\n';
+            let address_info = await api.getAddressInfo(wallet)
+            msg += `ETH:                    ${address_info["ETH"]["balance"]}\n`
+
+            for (let i of address_info['tokens']) {
+                msg += `${i['tokenInfo']['address']} (${i['tokenInfo']['symbol']})   ${i['balance'] / (10 ** (parseInt(i['tokenInfo']['decimals']) | 0))}\n`
+            };
+            return msg;
+        } catch (e) {
+            return `❗ Invalid address format`;
+        }
+
+    };
+
+    async checkSolanaTokensBalance(wallet) {
+        const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+
+        try {
+            const tokenAccounts = await connection.getTokenAccountsByOwner(
+                new web3.PublicKey(wallet),
+                {
+                    programId: spl.TOKEN_PROGRAM_ID,
+                });
+
+            var msg_text = 'Token                    Balance\n------------------------------------------------\n'
+
+            tokenAccounts.value.forEach((e) => {
+                const accountInfo = spl.AccountLayout.decode(e.account.data);
+                // console.log(`${new web3.PublicKey(accountInfo.mint)}   ${accountInfo.amount}`);
+                if (accountInfo.amount != '0') {
+                    msg_text += `${accountInfo.mint}    ${accountInfo.amount}\n`
+                };
+            });
+            return msg_text;
+
+        } catch (e) {
+            return `❗ Invalid address format`;
+        }
+
+    };
+
+    // TODO: add 'list of tracked wallets'
     async respondTo(message) {
         // console.log('New fsm created')
         let fsm = createFsm()
@@ -261,17 +266,18 @@ class Bot {
             fsm.saveRecord();
         }
 
-        fsm.onEnterCheckingbalance = () => {
+        fsm.onEnterCheckingbalance = async () => {
             fsm.wallet = lastReply.text;
             // let msg_text;
 
             if (fsm.chain == '2') {
-                var msg_text = checkEthereumTokensBalance(fsm.wallet)
+                var msg_text = await this.checkEthereumTokensBalance(fsm.wallet)
             } else if (fsm.chain == '1') {
-                var msg_text = checkSolanaTokensBalance(fsm.wallet)
+                var msg_text = await this.checkSolanaTokensBalance(fsm.wallet)
             };
 
-            console.log(`message is ${msg_text}`);
+            // const msg = await msg_text;
+            // console.log(`message is ${msg}`);
 
             lastMessage = this.client.sendMessage(message.chat.id,
                 `The balance of ${fsm.wallet} is:\n${msg_text}`,

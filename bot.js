@@ -153,7 +153,9 @@ class Bot {
         this.client = new TelegramBotClient(token,
             // { polling: true }
         );
-        this.client.setWebHook(config.heroku_app + token);
+        this.client.setWebHook(config.heroku_app + token, {
+            port: process.env.PORT || 3000
+        });
         // console.log(config.heroku_app + token);
     }
 

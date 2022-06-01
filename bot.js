@@ -151,10 +151,10 @@ const commands = ["Add wallet", "Remove wallet", "Check balance"]
 class Bot {
     constructor(token) {
         this.client = new TelegramBotClient(token,
-            // { polling: true }
+            { polling: true }
         );
         this.client.setWebHook(config.heroku_app + token, {
-            port: process.env.PORT || 3000
+            // port: process.env.PORT || 8080
         });
         // console.log(config.heroku_app + token);
     }

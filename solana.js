@@ -18,7 +18,7 @@ const csv = require('csv-parser');
 //     const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
 
 //     const tokenAccounts = await connection.getTokenAccountsByOwner(
-        
+
 //         new web3.PublicKey('E8PXoFg4cg7w6jJUursxwq2UHLiLt3pff4AQvFzGaUai'),
 //         //VKvJBDUj2Hi55rpAxLe1QaABt6oDEhBPyxZs1pC6L75
 //         {
@@ -35,7 +35,7 @@ const csv = require('csv-parser');
 //             tokens.push(accountInfo.mint);
 //             text += `${accountInfo.mint}    ${accountInfo.amount}\n`
 //         };
-        
+
 //     })
 
 //     console.log(`total tokens ${tokens.length}`);
@@ -73,7 +73,7 @@ var sol_wallets = [];
                 });
         });
     };
-    
+
 })();
 
 console.log('eth:', eth_wallets, 'sol:', sol_wallets);
@@ -122,7 +122,7 @@ AQoKYV7tYpTrFZN6P5oUufbQKAUr9mNYGe1TTJC9wajM  1
 //         updateAuthority: "6FVxrqH9FFtEFo643pYx8w5GqfYRS8uWA5hZMUn1VNFr"
 //         uses: undefined
 //       },
-  
+
 //       1: MetadataData {
 //         collection: undefined
 //         data: MetadataDataData {
@@ -158,3 +158,20 @@ await Promise.all(ownedMetadata.map(({ data }) => axios.get(data.uri))
 console.log(images);
 
 */
+
+
+// subscribe to logs
+
+// {
+//   "jsonrpc": "2.0",
+//   "id": 1,
+//   "method": "logsSubscribe",
+//   "params": [
+//     {
+//       "mentions": [ "11111111111111111111111111111111" ]
+//     },
+//     {
+//       "commitment": "finalized"
+//     }
+//   ]
+// }

@@ -1,7 +1,7 @@
 {
   "name": "wallet-tracker",
   "version": "1.0.0",
-  "description": "Telegram bot which tracks token transfers of scpecified wallets",
+  "description": "Telegram bot which tracks token transfers of specified wallets",
   "main": "main.js",
   "dependencies": {
     "@metaplex/js": "^4.12.0",
